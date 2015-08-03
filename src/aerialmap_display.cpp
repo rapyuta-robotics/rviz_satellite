@@ -7,6 +7,7 @@
  *
  *	Created on: 07/09/2014
  */
+#include <algorithm>
 
 #include <QtGlobal>
 #include <QImage>
@@ -38,6 +39,42 @@
 #include "rviz/display_context.h"
 
 #include "aerialmap_display.h"
+
+static size_t replaceRegex(const boost::regex &ex, std::string &str,
+                           const std::string &replace) {
+  std::string::const_iterator start = str.begin(), end = str.end();
+  boost::match_results<std::string::const_iterator> what;
+  boost::match_flag_type flags = boost::match_default;
+  size_t count = 0;
+  while (boost::regex_search(start, end, what, ex, flags)) {
+    str.replace(what.position(), what.length(), replace);
+    start = what[0].second;
+    ++count;
+  }
+  return count;
+}
+
+void latLonToTileCoords(double lat, double lon, unsigned int zoom,
+                                    int &x, int &y) {
+  if (zoom > 19) {
+    throw std::invalid_argument("Zoom level " + std::to_string(zoom) +
+                                " too high");
+  } else if (lat < -85.0511 || lat > 85.0511) {
+    throw std::invalid_argument("Latitude " + std::to_string(lat) + " invalid");
+  } else if (lon < -180 && lon > 180) {
+    throw std::invalid_argument("Longitude " + std::to_string(lon) +
+                                " invalid");
+  }
+
+  const double rho = M_PI / 180;
+  const double lat_rad = lat * rho;
+
+  unsigned int n = (1 << zoom);
+  x = (int) n * ((lon + 180) / 360.0);
+  y = (int) n * (1 - (std::log(std::tan(lat_rad) + 1 / std::cos(lat_rad)) / M_PI)) / 2;
+
+  std::cout << "Center tile coords: " << x << ", " << y << std::endl;
+}
 
 Ogre::TexturePtr textureFromBytes(const QByteArray &ba,
                                   const std::string &name) {
@@ -122,7 +159,7 @@ namespace rviz {
 
 AerialMapDisplay::AerialMapDisplay()
     : Display(), map_id_(0), scene_id_(0), dirty_(false),
-      received_msg_(false), loader_(0) {
+      received_msg_(false), loader_(0), offline_(0) {
 
   static unsigned int map_ids = 0;
   map_id_ = map_ids++; //  global counter of map ids
@@ -195,18 +232,45 @@ void AerialMapDisplay::subscribe() {
 
   if (!topic_property_->getTopic().isEmpty()) {
     try {
-      ROS_INFO("Subscribing to %s", topic_property_->getTopicStd().c_str());
-      coord_sub_ =
-          update_nh_.subscribe(topic_property_->getTopicStd(), 1,
-                               &AerialMapDisplay::navFixCallback, this);
+        ROS_INFO("Subscribing to %s", topic_property_->getTopicStd().c_str());
+        coord_sub_ =
+            update_nh_.subscribe(topic_property_->getTopicStd(), 1,
+                                 &AerialMapDisplay::navFixCallback, this);
 
-      setStatus(StatusProperty::Ok, "Topic", "OK");
+        setStatus(StatusProperty::Ok, "Topic", "OK");
+        }
+        catch (ros::Exception &e) {
+        setStatus(StatusProperty::Error, "Topic",
+                  QString("Error subscribing: ") + e.what());
     }
-    catch (ros::Exception &e) {
-      setStatus(StatusProperty::Error, "Topic",
-                QString("Error subscribing: ") + e.what());
+
+      try {
+          ROS_INFO("Subscribing to /rviz_satellite/save");
+          save_image_map_sub_ =
+              update_nh_.subscribe("/rviz_satellite/save", 1,
+                                   &AerialMapDisplay::saveImageMapCallback, this);
+
+          setStatus(StatusProperty::Ok, "Topic", "OK");
+          }
+          catch (ros::Exception &e) {
+          setStatus(StatusProperty::Error, "Topic",
+                    QString("Error subscribing: ") + e.what());
+          }
+
+      try {
+          ROS_INFO("Subscribing to /rviz_satellite/offline");
+          offline_sub_ =
+              update_nh_.subscribe("/rviz_satellite/offline", 1,
+                                   &AerialMapDisplay::offlineCallback, this);
+
+          setStatus(StatusProperty::Ok, "Topic", "OK");
+          }
+          catch (ros::Exception &e) {
+          setStatus(StatusProperty::Error, "Topic",
+                    QString("Error subscribing: ") + e.what());
+          }
     }
-  }
+
 }
 
 void AerialMapDisplay::unsubscribe() {
@@ -319,6 +383,97 @@ AerialMapDisplay::navFixCallback(const sensor_msgs::NavSatFixConstPtr &msg) {
   }
 }
 
+void
+AerialMapDisplay::saveImageMapCallback(const std_msgs::BoolConstPtr &msg) {
+    ROS_INFO("Save");
+    int tile_x = 0, tile_y = 0, blocks = (int)blocks_;
+
+    latLonToTileCoords(ref_lat_, ref_lon_, zoom_, tile_x, tile_y);
+
+    int min_x = std::max(0, tile_x - blocks);
+    const int min_y = std::max(0, tile_y - blocks);
+    const int max_x = std::min((1 << zoom_) - 1, tile_x + blocks);
+    const int max_y = std::min((1 << zoom_) - 1, tile_y + blocks);
+
+    //  initiate requests
+    for (int y = min_y; y <= max_y; y++) {
+      for (int x = min_x; x <= max_x; x++) {
+        saveImage(x, y);
+      }
+    }
+}
+
+void
+AerialMapDisplay::offlineCallback(const std_msgs::BoolConstPtr &msg) {
+    offline_ = msg->data;
+    ROS_INFO("Offline: %d", offline_);
+}
+
+void
+AerialMapDisplay::saveImage(int x, int y) {
+    std::stringstream ss;
+    ss << "/home/jpardeiro/img/img" << zoom_ << "-" << x << "-" << y << ".jpg";
+
+    QNetworkAccessManager *qnam_ = new QNetworkAccessManager(this);
+    QObject::connect(qnam_, SIGNAL(finished(QNetworkReply *)), this,
+                     SLOT(finishedRequest(QNetworkReply *)));
+
+    const QUrl uri = uriForTile(x, y);
+    //  send request
+    const QNetworkRequest request = QNetworkRequest(uri);
+    QNetworkReply *rep = qnam_->get(request);
+    emit initiatedRequest(request);
+
+    QEventLoop loop;
+    QObject::connect(rep, SIGNAL(finished()), &loop, SLOT(quit()));
+
+    loop.exec();
+
+    QFile file(QString::fromStdString(ss.str()));
+    file.open(QIODevice::WriteOnly);
+    file.write(rep->readAll());
+
+    /*CURL *image;
+    FILE *fp;
+
+    std::stringstream ss;
+
+    image = curl_easy_init();
+
+    ss << "/home/jpardeiro/img/img" << zoom_ << "-" << x << "-" << y << ".jpg";
+
+    fp = fopen(ss.str().c_str(), "wb");
+
+    curl_easy_setopt(image, CURLOPT_URL, uriForTile(x, y).c_str());
+    curl_easy_setopt(image, CURLOPT_WRITEFUNCTION, NULL);
+    curl_easy_setopt(image, CURLOPT_WRITEDATA, fp);
+
+    // Grab image
+    curl_easy_perform(image);
+
+    // Clean up the resources
+    curl_easy_cleanup(image);
+    // Close the file
+    fclose(fp);*/
+}
+
+QUrl AerialMapDisplay::uriForTile(int x, int y) const {
+  std::string object = object_uri_;
+
+  //TileLoader tileloader;
+  //  place {x},{y},{z} with appropriate values
+  replaceRegex(boost::regex("\\{x\\}", boost::regex::icase), object,
+               std::to_string(x));
+  replaceRegex(boost::regex("\\{y\\}", boost::regex::icase), object,
+               std::to_string(y));
+  replaceRegex(boost::regex("\\{z\\}", boost::regex::icase), object,
+               std::to_string(zoom_));
+
+  const QString qstr = QString::fromStdString(object);
+  return QUrl(qstr);
+}
+
+
 void AerialMapDisplay::loadImagery() {
   if (loader_) {
     //  cancel current imagery, if any
@@ -334,7 +489,13 @@ void AerialMapDisplay::loadImagery() {
     setStatus(StatusProperty::Error, "Message",
               "Received message but object URI is not set");
   }
-  const std::string service = object_uri_;
+
+  std::string service;
+  if (offline_)
+      service = "/home/jpardeiro/img/img{z}-{x}-{y}.jpg";
+  else
+      service = "http://otile1.mqcdn.com/tiles/1.0.0/sat/{z}/{x}/{y}.jpg";
+
   try {
     loader_ = new TileLoader(service, ref_lat_, ref_lon_, zoom_, blocks_, this);
   }

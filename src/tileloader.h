@@ -16,6 +16,8 @@
 #include <QNetworkAccessManager>
 #include <QString>
 #include <QNetworkReply>
+#include <QEventLoop>
+#include <QFile>
 #include <vector>
 #include <tuple>
 

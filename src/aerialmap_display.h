@@ -20,6 +20,7 @@
 #include <OGRE/OgreVector3.h>
 
 #include <sensor_msgs/NavSatFix.h>
+#include <std_msgs/Bool.h>
 
 #include <QObject>
 #include <QtConcurrentRun>
@@ -82,6 +83,12 @@ protected:
 
   void navFixCallback(const sensor_msgs::NavSatFixConstPtr &msg);
 
+  void saveImageMapCallback(const std_msgs::BoolConstPtr &msg);
+
+  void offlineCallback(const std_msgs::BoolConstPtr &msg);
+
+  QUrl uriForTile(int x, int y) const;
+
   void loadImagery();
 
   void assembleScene();
@@ -91,6 +98,8 @@ protected:
   void clearGeometry();
 
   void transformAerialMap();
+
+  void saveImage(int x, int y);
 
   unsigned int map_id_;
   unsigned int scene_id_;
@@ -106,7 +115,7 @@ protected:
   std::string topic_;
   std::string frame_;
 
-  ros::Subscriber coord_sub_;
+  ros::Subscriber coord_sub_, save_image_map_sub_, offline_sub_;
 
   //  properties
   RosTopicProperty *topic_property_;
@@ -130,6 +139,7 @@ protected:
   double ref_lat_;
   double ref_lon_;
   TileLoader *loader_;
+  bool offline_;
 };
 
 } // namespace rviz
