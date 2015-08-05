@@ -154,16 +154,7 @@ void TileLoader::finishedRequest(QNetworkReply *reply) {
     emit errorOcurred(err);
   }
 
-  //  check if all tiles have images
-  bool loaded = true;
-  for (MapTile &tile : tiles_) {
-    if (!tile.hasImage()) {
-      loaded = false;
-    }
-  }
-  if (loaded) {
-    emit finishedLoading();
-  }
+   emit finishedLoading();
 }
 
 QUrl TileLoader::uriForTile(int x, int y) const {

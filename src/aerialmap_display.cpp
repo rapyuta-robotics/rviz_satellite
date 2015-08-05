@@ -213,7 +213,7 @@ AerialMapDisplay::AerialMapDisplay()
 
   // Create dir
   std::stringstream ss;
-  ss << QDir::homePath().toUtf8().constData() << "/img";
+  ss << QDir::homePath().toUtf8().constData() << "/satellite_images";
   createFolder(ss.str());
 
   //  updating one triggers reload
@@ -378,9 +378,7 @@ void AerialMapDisplay::update(float, float) {
 
 void
 AerialMapDisplay::navFixCallback(const sensor_msgs::NavSatFixConstPtr &msg) {
-  //  only re-load if coordinates changed, in case the topic is not latched
-  if (msg->latitude != ref_lat_ || msg->longitude != ref_lon_ ||
-      !received_msg_) {
+    //  only re-load if coordinates changed, in case the topic is not latched
     ref_lat_ = msg->latitude;
     ref_lon_ = msg->longitude;
     ROS_INFO("Reference point set to: %f, %f", ref_lat_, ref_lon_);
@@ -389,7 +387,6 @@ AerialMapDisplay::navFixCallback(const sensor_msgs::NavSatFixConstPtr &msg) {
     //  re-load imagery
     received_msg_ = true;
     loadImagery();
-  }
 }
 
 void
@@ -431,7 +428,9 @@ AerialMapDisplay::createFolder(std::string dir) {
 void
 AerialMapDisplay::saveImage(int x, int y) {
     std::stringstream ss;
-    ss << QDir::homePath().toUtf8().constData() << "/img/img" << zoom_ << "-" << x << "-" << y << ".jpg";
+    ss << QDir::homePath().toUtf8().constData() << "/satellite_images";
+    createFolder(ss.str());
+    ss << "/img" << zoom_ << "-" << x << "-" << y << ".jpg";
 
     QNetworkAccessManager *qnam_ = new QNetworkAccessManager(this);
 
@@ -511,7 +510,7 @@ void AerialMapDisplay::loadImagery() {
   if (offline_)
   {
       std::stringstream ss;
-      ss << QDir::homePath().toUtf8().constData() << "/img/img{z}-{x}-{y}.jpg";
+      ss << QDir::homePath().toUtf8().constData() << "/satellite_images/img{z}-{x}-{y}.jpg";
       service = ss.str();
   }
   else
