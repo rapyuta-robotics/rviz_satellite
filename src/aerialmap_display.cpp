@@ -14,6 +14,7 @@
 
 #include <boost/bind.hpp>
 #include <boost/regex.hpp>
+#include <boost/filesystem.hpp>
 
 #include <FreeImage.h>
 
@@ -23,6 +24,8 @@
 #include <OGRE/OgreSceneNode.h>
 #include <OGRE/OgreTextureManager.h>
 #include <OGRE/OgreImageCodec.h>
+
+#include <QDir>
 
 #include <ros/ros.h>
 #include <tf/transform_listener.h>
@@ -206,6 +209,12 @@ AerialMapDisplay::AerialMapDisplay()
       new IntProperty("Blocks", 3, "Number of adjacent blocks (6 max)", this,
                       SLOT(updateBlocks()));
   blocks_property_->setShouldBeSaved(true);
+
+
+  // Create dir
+  std::stringstream ss;
+  ss << QDir::homePath().toUtf8().constData() << "/img";
+  createFolder(ss.str());
 
   //  updating one triggers reload
   updateBlocks();
@@ -409,14 +418,22 @@ AerialMapDisplay::offlineCallback(const std_msgs::BoolConstPtr &msg) {
     ROS_INFO("Offline: %d", offline_);
 }
 
+bool
+AerialMapDisplay::createFolder(std::string dir) {
+    const char* path = dir.c_str();
+    boost::filesystem::path dir_path(path);
+    if(boost::filesystem::create_directory(dir_path))
+        return true;
+
+    return false;
+}
+
 void
 AerialMapDisplay::saveImage(int x, int y) {
     std::stringstream ss;
-    ss << "/home/jpardeiro/img/img" << zoom_ << "-" << x << "-" << y << ".jpg";
+    ss << QDir::homePath().toUtf8().constData() << "/img/img" << zoom_ << "-" << x << "-" << y << ".jpg";
 
     QNetworkAccessManager *qnam_ = new QNetworkAccessManager(this);
-    QObject::connect(qnam_, SIGNAL(finished(QNetworkReply *)), this,
-                     SLOT(finishedRequest(QNetworkReply *)));
 
     const QUrl uri = uriForTile(x, y);
     //  send request
@@ -492,7 +509,11 @@ void AerialMapDisplay::loadImagery() {
 
   std::string service;
   if (offline_)
-      service = "/home/jpardeiro/img/img{z}-{x}-{y}.jpg";
+  {
+      std::stringstream ss;
+      ss << QDir::homePath().toUtf8().constData() << "/img/img{z}-{x}-{y}.jpg";
+      service = ss.str();
+  }
   else
       service = "http://otile1.mqcdn.com/tiles/1.0.0/sat/{z}/{x}/{y}.jpg";
 

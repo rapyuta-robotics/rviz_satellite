@@ -87,6 +87,8 @@ protected:
 
   void offlineCallback(const std_msgs::BoolConstPtr &msg);
 
+  bool createFolder(std::string dir);
+
   QUrl uriForTile(int x, int y) const;
 
   void loadImagery();
