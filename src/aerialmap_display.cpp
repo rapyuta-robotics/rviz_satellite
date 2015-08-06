@@ -254,17 +254,17 @@ void AerialMapDisplay::subscribe() {
     }
 
       try {
-          ROS_INFO("Subscribing to /rviz_satellite/save");
+          ROS_INFO("Subscribing to /rviz_satellite/save_map");
           save_image_map_sub_ =
-              update_nh_.subscribe("/rviz_satellite/save", 1,
+              update_nh_.subscribe("/rviz_satellite/save_map", 1,
                                    &AerialMapDisplay::saveImageMapCallback, this);
 
           setStatus(StatusProperty::Ok, "Topic", "OK");
-          }
-          catch (ros::Exception &e) {
-          setStatus(StatusProperty::Error, "Topic",
-                    QString("Error subscribing: ") + e.what());
-          }
+      }
+      catch (ros::Exception &e) {
+      setStatus(StatusProperty::Error, "Topic",
+                QString("Error subscribing: ") + e.what());
+      }
 
       try {
           ROS_INFO("Subscribing to /rviz_satellite/offline");
@@ -273,11 +273,11 @@ void AerialMapDisplay::subscribe() {
                                    &AerialMapDisplay::offlineCallback, this);
 
           setStatus(StatusProperty::Ok, "Topic", "OK");
-          }
-          catch (ros::Exception &e) {
-          setStatus(StatusProperty::Error, "Topic",
-                    QString("Error subscribing: ") + e.what());
-          }
+      }
+      catch (ros::Exception &e) {
+      setStatus(StatusProperty::Error, "Topic",
+                QString("Error subscribing: ") + e.what());
+      }
     }
 
 }
@@ -419,10 +419,8 @@ bool
 AerialMapDisplay::createFolder(std::string dir) {
     const char* path = dir.c_str();
     boost::filesystem::path dir_path(path);
-    if(boost::filesystem::create_directory(dir_path))
-        return true;
 
-    return false;
+    return boost::filesystem::create_directory(dir_path);
 }
 
 void
