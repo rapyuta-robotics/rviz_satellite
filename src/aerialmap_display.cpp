@@ -210,12 +210,6 @@ AerialMapDisplay::AerialMapDisplay()
                       SLOT(updateBlocks()));
   blocks_property_->setShouldBeSaved(true);
 
-
-  // Create dir
-  std::stringstream ss;
-  ss << QDir::homePath().toUtf8().constData() << "/satellite_images";
-  createFolder(ss.str());
-
   //  updating one triggers reload
   updateBlocks();
 }
