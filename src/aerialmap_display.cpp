@@ -272,8 +272,38 @@ void AerialMapDisplay::subscribe() {
       setStatus(StatusProperty::Error, "Topic",
                 QString("Error subscribing: ") + e.what());
       }
+
+      try {
+          ROS_INFO("Subscribing to /rviz_satellite/load_folder");
+          load_folder_sub_ =
+              update_nh_.subscribe("/rviz_satellite/load_folder", 1,
+                                   &AerialMapDisplay::loadFolderCallback, this);
+
+          setStatus(StatusProperty::Ok, "Topic", "OK");
+      }
+      catch (ros::Exception &e) {
+      setStatus(StatusProperty::Error, "Topic",
+                QString("Error subscribing: ") + e.what());
+      }
+
+      try {
+          ROS_INFO("Subscribing to /rviz_satellite/save_folder");
+          save_folder_sub_ =
+              update_nh_.subscribe("/rviz_satellite/save_folder", 1,
+                                   &AerialMapDisplay::saveFolderCallback, this);
+
+          setStatus(StatusProperty::Ok, "Topic", "OK");
+      }
+      catch (ros::Exception &e) {
+      setStatus(StatusProperty::Error, "Topic",
+                QString("Error subscribing: ") + e.what());
+      }
     }
 
+  std::stringstream ss;
+  ss << getenv("HOME") << "/satellite_images";
+  _save_path = ss.str();
+  _load_path = ss.str();
 }
 
 void AerialMapDisplay::unsubscribe() {
@@ -409,6 +439,16 @@ AerialMapDisplay::offlineCallback(const std_msgs::BoolConstPtr &msg) {
     ROS_INFO("Offline: %d", offline_);
 }
 
+void
+AerialMapDisplay::loadFolderCallback(const std_msgs::String &msg) {
+    _load_path = msg.data;
+}
+
+void
+AerialMapDisplay::saveFolderCallback(const std_msgs::String &msg) {
+    _save_path = msg.data;
+}
+
 bool
 AerialMapDisplay::createFolder(std::string dir) {
     const char* path = dir.c_str();
@@ -420,7 +460,8 @@ AerialMapDisplay::createFolder(std::string dir) {
 void
 AerialMapDisplay::saveImage(int x, int y) {
     std::stringstream ss;
-    ss << QDir::homePath().toUtf8().constData() << "/satellite_images";
+    //ss << QDir::homePath().toUtf8().constData() << "/satellite_images";
+    ss << _save_path.c_str();
     createFolder(ss.str());
     ss << "/img" << zoom_ << "-" << x << "-" << y << ".jpg";
 
@@ -502,7 +543,10 @@ void AerialMapDisplay::loadImagery() {
   if (offline_)
   {
       std::stringstream ss;
-      ss << QDir::homePath().toUtf8().constData() << "/satellite_images/img{z}-{x}-{y}.jpg";
+      //ss << QDir::homePath().toUtf8().constData() << "/satellite_images/img{z}-{x}-{y}.jpg";
+
+      ss << _load_path.c_str() << "/img{z}-{x}-{y}.jpg";
+      std::cout << "Path: "<< ss.str() << std::endl;
       service = ss.str();
   }
   else

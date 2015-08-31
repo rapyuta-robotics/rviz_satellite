@@ -21,6 +21,7 @@
 
 #include <sensor_msgs/NavSatFix.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/String.h>
 
 #include <QObject>
 #include <QtConcurrentRun>
@@ -87,6 +88,10 @@ protected:
 
   void offlineCallback(const std_msgs::BoolConstPtr &msg);
 
+  void loadFolderCallback(const std_msgs::String &msg);
+
+  void saveFolderCallback(const std_msgs::String &msg);
+
   bool createFolder(std::string dir);
 
   QUrl uriForTile(int x, int y) const;
@@ -117,7 +122,7 @@ protected:
   std::string topic_;
   std::string frame_;
 
-  ros::Subscriber coord_sub_, save_image_map_sub_, offline_sub_;
+  ros::Subscriber coord_sub_, save_image_map_sub_, offline_sub_, load_folder_sub_, save_folder_sub_;
 
   //  properties
   RosTopicProperty *topic_property_;
@@ -142,6 +147,9 @@ protected:
   double ref_lon_;
   TileLoader *loader_;
   bool offline_;
+
+  std::string _load_path;
+  std::string _save_path;
 };
 
 } // namespace rviz
